@@ -2,15 +2,69 @@
 using Google.Protobuf;
 using System.Diagnostics;
 
-namespace CscPersistentWorker;
+namespace PersistentWorker;
 
-internal class PersistentWorker
+public class PersistentWorker<T> where T : IPersistentWorkerCustomization
 {
+    const string PERSISTENT_WORKER_FLAG = "--persistent_worker";
+
     private readonly string _executable;
     private readonly string _compiler;
 
     private readonly Stream _stdIn;
     private readonly Stream _stdOut;
+
+    static int RunStandaloneCompile(List<string> args)
+    {
+        if (args.Count < 2)
+        {
+            throw new Exception("Expected at least two arguments.");
+        }
+
+        var psi = new ProcessStartInfo(args[0]);
+        for (int i = 1; i < args.Count; i++)
+        {
+            psi.ArgumentList.Add(args[i]);
+        }
+        foreach (string arg in T.GetExtraArguments(args[1]))
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        var p = Process.Start(psi);
+        if (p == null)
+            throw new Exception("Process.Start returned null for " + args[0]);
+        p.WaitForExit();
+        return p.ExitCode;
+    }
+
+    public static int RunMain(string[] args)
+    {
+        bool isPersistentWorker = false;
+        List<string> interestingArgs = new List<string>();
+        foreach (var arg in args)
+        {
+            if (arg == PERSISTENT_WORKER_FLAG)
+            {
+                isPersistentWorker = true;
+            }
+            else
+            {
+                interestingArgs.Add(arg);
+            }
+        }
+
+        if (isPersistentWorker)
+        {
+            var worker = new PersistentWorker<T>(interestingArgs);
+            worker.Run();
+            return 0;
+        }
+        else
+        {
+            return RunStandaloneCompile(interestingArgs);
+        }
+    }
 
     public PersistentWorker(List<string> args)
     {
@@ -85,7 +139,10 @@ internal class PersistentWorker
         {
             psi.ArgumentList.Add(arg);
         }
-        psi.ArgumentList.Add(Program.CreatePathMapArg(Environment.CurrentDirectory));
+        foreach (string arg in T.GetExtraArguments(_compiler))
+        {
+            psi.ArgumentList.Add(arg);
+        }
 
         var p = Process.Start(psi);
         if (p == null)
