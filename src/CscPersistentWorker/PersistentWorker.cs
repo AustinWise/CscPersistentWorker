@@ -59,15 +59,17 @@ internal class PersistentWorker
             throw new Exception("Process.Start returned null for " + _executable);
 
         p.StandardInput.Close();
-        var stdOut = await p.StandardOutput.ReadToEndAsync();
-        var stdErr = await p.StandardError.ReadToEndAsync();
+        var stdOutTask = p.StandardOutput.ReadToEndAsync();
+        var stdErrTask = p.StandardError.ReadToEndAsync();
+
+        string[] outputs = await Task.WhenAll(stdOutTask, stdErrTask);
 
         await p.WaitForExitAsync();
 
         var response = new WorkResponse();
         response.RequestId = request.RequestId;
         response.ExitCode = p.ExitCode;
-        response.Output = stdOut + (stdErr.Length == 0 ? string.Empty : ("\n" + stdErr));
+        response.Output = outputs[0] + (outputs[1].Length == 0 ? string.Empty : ("\n" + outputs[1]));
 
         lock (this)
         {
