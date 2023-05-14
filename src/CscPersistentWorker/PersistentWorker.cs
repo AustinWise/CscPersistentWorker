@@ -34,11 +34,44 @@ internal class PersistentWorker
                 continue;
             }
 
-            Task.Run(() => RunRequestAsync(request));
+            if (!string.IsNullOrEmpty(request.SandboxDir))
+            {
+                var response = new WorkResponse();
+                response.RequestId = request.RequestId;
+                response.ExitCode = 1;
+                response.Output = "supports-multiplex-sandboxing not implemented";
+
+                lock (this)
+                {
+                    response.WriteDelimitedTo(_stdOut);
+                }
+                continue;
+            }
+
+            Task.Run(async () =>
+            {
+                WorkResponse response;
+                try
+                {
+                    response = await RunRequestAsync(request);
+                }
+                catch (Exception ex)
+                {
+                    response = new WorkResponse();
+                    response.RequestId = request.RequestId;
+                    response.ExitCode = 1;
+                    response.Output = ex.ToString();
+                }
+
+                lock (this)
+                {
+                    response.WriteDelimitedTo(_stdOut);
+                }
+            });
         }
     }
 
-    private async Task RunRequestAsync(WorkRequest request)
+    private async Task<WorkResponse> RunRequestAsync(WorkRequest request)
     {
         var psi = new ProcessStartInfo(_executable)
         {
@@ -52,11 +85,13 @@ internal class PersistentWorker
         {
             psi.ArgumentList.Add(arg);
         }
-        psi.ArgumentList.Add(Program.CreatePathMapArg(request.SandboxDir ?? Environment.CurrentDirectory));
+        psi.ArgumentList.Add(Program.CreatePathMapArg(Environment.CurrentDirectory));
 
         var p = Process.Start(psi);
         if (p == null)
+        {
             throw new Exception("Process.Start returned null for " + _executable);
+        }
 
         p.StandardInput.Close();
         var stdOutTask = p.StandardOutput.ReadToEndAsync();
@@ -70,10 +105,6 @@ internal class PersistentWorker
         response.RequestId = request.RequestId;
         response.ExitCode = p.ExitCode;
         response.Output = outputs[0] + (outputs[1].Length == 0 ? string.Empty : ("\n" + outputs[1]));
-
-        lock (this)
-        {
-            response.WriteDelimitedTo(_stdOut);
-        }
+        return response;
     }
 }
