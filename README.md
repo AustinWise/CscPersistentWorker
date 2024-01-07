@@ -35,6 +35,8 @@ any process to handle a build request. Option number 2 would be more involved, a
 server protocol is not officially documented or exposed as an API. It is an implementation detail
 of `csc.exe`. It goes as far as to
 [embed the Git commit hash of the complier into the protocol](https://github.com/dotnet/roslyn/blob/70514c118e2ce45e3b6684d69c7563ac9e2b6f58/src/Compilers/Core/CommandLine/BuildProtocol.cs#L38).
+It appears that [AFASResearch/rules_dotnet](https://github.com/AFASResearch/rules_dotnet) takes this
+approach.
 
 ## Other levels of build servers
 
